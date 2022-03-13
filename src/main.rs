@@ -1,29 +1,75 @@
 use core::mem::MaybeUninit;
 use trayicon::*;
 use winapi::um::winuser;
+use crate::State::{Connected, Disconnected};
 
-fn main() {
-    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-    enum Events {
-        ClickTrayIcon,
-        DoubleClickTrayIcon,
-        Exit,
-        Item1,
-        Item2,
-        Item3,
-        Item4,
-        CheckItem1,
-        SubItem1,
-        SubItem2,
-        SubItem3,
+
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum Events {
+    ClickTrayIcon,
+    DoubleClickTrayIcon,
+    CheckStatus,
+    ToggleStatus,
+    Exit,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+enum State {
+    Unknown,
+    Connected,
+    Disconnected,
+}
+
+struct Connection {
+    state: State,
+    msg: String
+}
+
+type ConnResult = Result<State, Error>;
+
+impl Connection {
+    fn new(address: String) -> Connection {
+
     }
 
+    fn check(self) -> ConnResult {
+        Ok(self.state)
+    }
+
+    fn connect(self) -> ConnResult {
+        Ok(self.state)
+    }
+
+    fn disconnect(self) -> ConnResult {
+        Ok(self.state)
+    }
+
+    fn toggle(mut self) {
+        match self.state {
+            State::Unknown => {
+                self.check().map_err(|e|{}).map(|s| {self.toggle()});
+            }
+            State::Connected => {
+                self.disconnect().map(|s| {self.state = s}).map_err(|e| {println!("WTF")});
+            }
+            State::Disconnected => {
+                self.connect().map(|s| {self.state = s});
+            }
+        }
+    }
+}
+
+
+fn main() {
     let (s, r) = std::sync::mpsc::channel::<Events>();
     let icon_off_buf = include_bytes!("../res/wireguard_off.ico");
     let icon_on_buf = include_bytes!("../res/wireguard_on.ico");
 
     let icon_off = Icon::from_buffer(icon_off_buf, None, None).unwrap();
     let icon_on = Icon::from_buffer(icon_on_buf, None, None).unwrap();
+
+    let conn = Connection::new();
 
     // Needlessly complicated tray icon with all the whistles and bells
     let mut tray_icon = TrayIconBuilder::new()
@@ -34,26 +80,10 @@ fn main() {
         .on_double_click(Events::DoubleClickTrayIcon)
         .menu(
             MenuBuilder::new()
-                .item("Item 3 Replace Menu 👍", Events::Item3)
-                .item("Item 2 Change Icon Green", Events::Item2)
-                .item("Item 1 Change Icon Red", Events::Item1)
+                .item("Reload status", Events::CheckStatus)
+                .checkable("Enable tunnel", false, Events::ToggleStatus)
                 .separator()
-                .checkable("Enable tunnel", false, Events::CheckItem1)
-                .submenu(
-                    "Sub Menu",
-                    MenuBuilder::new()
-                        .item("Sub item 1", Events::SubItem1)
-                        .item("Sub Item 2", Events::SubItem2)
-                        .item("Sub Item 3", Events::SubItem3),
-                )
-                .with(MenuItem::Item {
-                    name: "Item Disabled".into(),
-                    disabled: true, // Disabled entry example
-                    id: Events::Item4,
-                    icon: None,
-                })
-                .separator()
-                .item("E&xit", Events::Exit),
+                .item("Exit", Events::Exit),
         )
         .build()
         .unwrap();
@@ -62,27 +92,13 @@ fn main() {
         r.iter().for_each(|m| match m {
             Events::DoubleClickTrayIcon => {
                 println!("Double click");
+                tray_icon.set_icon(&icon_on).unwrap();
             }
             Events::ClickTrayIcon => {
                 println!("Single click");
             }
             Events::Exit => {
                 println!("Please exit");
-            }
-            Events::Item1 => {
-                tray_icon.set_icon(&icon_on).unwrap();
-            }
-            Events::Item2 => {
-                tray_icon.set_icon(&icon_off).unwrap();
-            }
-            Events::Item3 => {
-                tray_icon
-                    .set_menu(
-                        &MenuBuilder::new()
-                            .item("New menu item", Events::Item1)
-                            .item("Exit", Events::Exit),
-                    )
-                    .unwrap();
             }
             e => {
                 println!("{:?}", e);
